@@ -1,0 +1,6 @@
+{
+  "name": "FaceMatch Pro",
+  "description": "Enterprise Web & Mobile Face Detection, Face Registration, and Face Matching System. Includes live camera scanning, multi-match modes, and complete Flutter & Python FastAPI code deliverables.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

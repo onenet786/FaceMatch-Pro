@@ -1,0 +1,100 @@
+# FaceMatch Pro: Multi-Container Microservice Orchestration Script
+# Target Runtime: Docker Engine 20.10+ / Docker Compose v2
+
+version: '3.8'
+
+services:
+  # 1. Relational Biometric Database
+  db:
+    image: ankane/pgvector:v0.5.1 # PostgreSQL base pre-loaded with pgvector extension
+    container_name: facematch-db
+    restart: always
+    environment:
+      POSTGRES_DB: facematch_prod
+      POSTGRES_USER: facematch_admin
+      POSTGRES_PASSWORD: SecretSecurePassword123!
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U facematch_admin -d facematch_prod"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. Redis Cache (Logs buffer and session tracking)
+  cache:
+    image: redis:7.0-alpine
+    container_name: facematch-cache
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 3. Python FastAPI AI Recognition Service (InsightFace + OpenCV)
+  ai-service:
+    build:
+      context: ./ai_service
+      dockerfile: Dockerfile
+    container_name: facematch-ai-service
+    restart: always
+    environment:
+      - MODEL_NAME=buffalo_l
+      - NUM_THREADS=4
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./ai_service/models:/app/models
+    # Requires NVIDIA Container Toolkit if utilizing GPU accel
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # 4. Full-Stack Node.js Express Core Gateway API & Admin Panel
+  gateway-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: facematch-gateway-api
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - DATABASE_URL=postgres://facematch_admin:SecretSecurePassword123!@db:5432/facematch_prod
+      - REDIS_URL=redis://cache:6379
+      - AI_SERVICE_URL=http://ai-service:8000
+      - JWT_SECRET=CryptographicTokenSecretValue567!
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
